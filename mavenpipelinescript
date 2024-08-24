@@ -1,0 +1,33 @@
+node {
+    echo "Job Name is : ${env.JOB_NAME}"
+    echo " Build Number is : ${env.BUILD_NUMBER}"
+    echo "Jenkins HD is : ${env.JENKINS_HOME}"
+    properties([
+        buildDiscarder(logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '5', daysToKeepStr: '', numToKeepStr: '5')),
+        pipelineTriggers([pollSCM('H/5 * * * *')]) // Changed to every 5 minutes to reduce load
+    ])
+    def mavenHome = tool name: "maven 3.9.8"
+    
+    stage ("Gitclone") {
+        git branch: 'development', credentialsId: 'bda47256-24ca-4370-be66-7191213efab0', url: 'https://github.com/SanzSolutions/maven-web-application.git'
+    }
+    
+    stage ("mavenbuild") {
+        sh "${mavenHome}/bin/mvn clean package"
+    }
+    
+    stage ("sonarReport") {
+        sh "${mavenHome}/bin/mvn clean sonar:sonar"
+    }
+    
+    stage ("upload artifats into nexus repo") {
+        sh "${mavenHome}/bin/mvn clean deploy"
+    }
+    
+    stage ("deployintotomcatserver") {
+        sshagent(['5a3c382a-7468-4685-95fc-92244cbd119b']) {
+            sh "scp -o StrictHostKeyChecking=no target/maven-web-application.war ec2-user@172.31.59.127:/opt/apache-tomcat-9.0.91/webapps/"
+        }
+    }
+}
+
